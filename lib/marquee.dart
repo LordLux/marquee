@@ -53,48 +53,13 @@ class _IntegralCurve extends Curve {
   }
 }
 
-/// A widget that repeats text and automatically scrolls it infinitely.
-///
-/// ## Sample code
-///
-/// This is a minimalistic example:
-///
-/// ```dart
-/// Marquee(
-///   text: 'There once was a boy who told this story about a boy: "',
-/// )
-/// ```
-///
-/// And here's a piece of code that makes full use of the marquee's
-/// customizability:
-///
-/// ```dart
-/// Marquee(
-///   text: 'Some sample text that takes some space.',
-///   style: TextStyle(fontWeight: FontWeight.bold),
-///   scrollAxis: Axis.horizontal,
-///   blankSpace: 20.0,
-///   velocity: 100.0,
-///   pauseAfterRound: Duration(seconds: 1),
-///   startPadding: 10.0,
-///   accelerationDuration: Duration(seconds: 1),
-///   accelerationCurve: Curves.linear,
-///   decelerationDuration: Duration(milliseconds: 500),
-///   decelerationCurve: Curves.easeOut,
-/// )
-/// ```
-///
-/// See also:
-///
-/// * [ListView.builder], where by returning the same widget to the builder
-///   every time, a similar result can be achieved, just without the automatic
-///   scrolling and manual scrolling enabled.
+/// A widget that repeats a widget and automatically scrolls it infinitely.
 class Marquee extends StatefulWidget {
   Marquee({
     super.key,
-    required this.text,
-    this.style,
-    this.textScaleFactor,
+    required this.child,
+    this.containerExtent,
+    this.sizeCalculator,
     this.textDirection = TextDirection.ltr,
     this.scrollAxis = Axis.horizontal,
     this.crossAxisAlignment = CrossAxisAlignment.center,
@@ -144,362 +109,136 @@ class Marquee extends StatefulWidget {
           "The decelerationDuration must be positive or zero as time travel "
           "isn't invented yet.",
         ),
+        assert(containerExtent != null || sizeCalculator != null,
+            "Either containerExtent or sizeCalculator must be provided."),
         this.accelerationCurve = _IntegralCurve(accelerationCurve),
         this.decelerationCurve = _IntegralCurve(decelerationCurve);
 
-  /// The text to be displayed.
-  ///
-  /// See also:
-  ///
-  /// * [style] to style the text.
-  final String text;
+  /// A factory that creates a [Marquee] from a [String].
+  factory Marquee.text({
+    Key? key,
+    required String text,
+    TextStyle? style,
+    double? textScaleFactor,
+    TextDirection textDirection = TextDirection.ltr,
+    Axis scrollAxis = Axis.horizontal,
+    CrossAxisAlignment crossAxisAlignment = CrossAxisAlignment.center,
+    double blankSpace = 0.0,
+    double velocity = 50.0,
+    Duration startAfter = Duration.zero,
+    Duration pauseAfterRound = Duration.zero,
+    bool showFadingOnlyWhenScrolling = true,
+    double fadingEdgeStartFraction = 0.0,
+    double fadingEdgeEndFraction = 0.0,
+    int? numberOfRounds,
+    double startPadding = 0.0,
+    Duration accelerationDuration = Duration.zero,
+    Curve accelerationCurve = Curves.decelerate,
+    Duration decelerationDuration = Duration.zero,
+    Curve decelerationCurve = Curves.decelerate,
+    VoidCallback? onDone,
+  }) {
+    return Marquee(
+      key: key,
+      child: Text(
+        text,
+        style: style,
+        textScaler: textScaleFactor != null
+            ? TextScaler.linear(textScaleFactor)
+            : null,
+      ),
+      textDirection: textDirection,
+      scrollAxis: scrollAxis,
+      crossAxisAlignment: crossAxisAlignment,
+      blankSpace: blankSpace,
+      velocity: velocity,
+      startAfter: startAfter,
+      pauseAfterRound: pauseAfterRound,
+      showFadingOnlyWhenScrolling: showFadingOnlyWhenScrolling,
+      fadingEdgeStartFraction: fadingEdgeStartFraction,
+      fadingEdgeEndFraction: fadingEdgeEndFraction,
+      numberOfRounds: numberOfRounds,
+      startPadding: startPadding,
+      accelerationDuration: accelerationDuration,
+      accelerationCurve: accelerationCurve,
+      decelerationDuration: decelerationDuration,
+      decelerationCurve: decelerationCurve,
+      onDone: onDone,
+      sizeCalculator: (BuildContext context) {
+        final span = TextSpan(text: text, style: style);
+        final constraints = BoxConstraints(maxWidth: double.infinity);
+        final richTextWidget = Text.rich(
+          span,
+          textScaler: textScaleFactor != null
+              ? TextScaler.linear(textScaleFactor)
+              : null,
+        ).build(context) as RichText;
+        final renderObject = richTextWidget.createRenderObject(context);
+        renderObject.layout(constraints);
+        final boxes = renderObject.getBoxesForSelection(TextSelection(
+          baseOffset: 0,
+          extentOffset: text.length,
+        ));
+        return boxes.last.right;
+      },
+    );
+  }
 
-  /// The style of the text to be displayed.
-  ///
-  /// ## Sample code
-  ///
-  /// This marquee has a bold text:
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   text: 'This is some bold text.',
-  ///   style: TextStyle(weight: FontWeight.bold)
-  /// )
-  /// ```
-  ///
-  /// See also:
-  ///
-  /// * [text] to provide the text itself.
-  final TextStyle? style;
+  /// The widget to be displayed.
+  final Widget child;
 
-  /// The font scale of the text to be displayed.
-  ///
-  /// ## Sample code
-  ///
-  /// This marquee has a fixed text scale factor, indipendent to the user selected resolution:
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   text: 'This is some bold text.',
-  ///   textScaleFactor: 1
-  /// )
-  /// ```
-  ///
-  /// See also:
-  ///
-  /// * [text] to provide the text itself.
-  final double? textScaleFactor;
+  /// The extent of the [child] along the [scrollAxis].
+  final double? containerExtent;
 
-  /// The text direction of the text to be displayed.
-  ///
-  /// ## Sample code
-  ///
-  /// This marquee has a RTL (Right-to-Left) text:
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   text: 'טקסט בעברית',
-  ///   textDirection: TextDirection.rtl
-  /// )
-  /// ```
-  ///
-  /// See also:
-  ///
-  /// * [text] to provide the text itself.
+  /// A function to calculate the size of the [child] if [containerExtent] is not provided.
+  final double Function(BuildContext)? sizeCalculator;
+
+  /// The text direction.
   final TextDirection textDirection;
 
   /// The scroll axis.
-  ///
-  /// If set to [Axis.horizontal], the default scrolling direction is to the
-  /// right.
-  /// If set to [Axis.vertical], the default scrolling direction is to the
-  /// bottom.
-  ///
-  /// ## Sample code
-  ///
-  /// This marquee scrolls vertically:
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   scrollAxis: Axis.vertical,
-  ///   text: "Look what's below this:",
-  /// )
-  /// ```
-  ///
-  /// See also:
-  ///
-  /// * The sign of [velocity] to define the concrete scroll direction on this
-  ///   axis.
   final Axis scrollAxis;
 
   /// The alignment along the cross axis.
-  ///
-  /// # Sample code
-  ///
-  /// ```-dart
-  /// Marquee(
-  ///   crossAxisAlignment: CrossAxisAlignment.start,
-  /// )
-  /// ```
-  ///
-  /// See also:
-  ///
-  /// * [scrollAxis] for setting the primary axis.
   final CrossAxisAlignment crossAxisAlignment;
 
   /// The extend of blank space to display between instances of the text.
-  ///
-  /// ## Sample code
-  ///
-  /// In this example, there's 300 density pixels between the text instances:
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   blankSpace: 300.0,
-  ///   child: 'Wait for it...',
-  /// )
-  /// ```
   final double blankSpace;
 
   /// The scrolling velocity in pixels per second.
-  ///
-  /// If a negative velocity is provided, the marquee scrolls in the reverse
-  /// direction (to the right for horizontal marquees and to the top for
-  /// vertical ones).
-  ///
-  /// ## Sample code
-  ///
-  /// This marquee scrolls backwards with 1000 pixels per second:
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   velocity: -1000.0,
-  ///   text: 'Gotta go fast in the reverse direction',
-  /// )
-  /// ```
-  ///
-  /// See also:
-  ///
-  /// * [scrollAxis] to change the axis in which the scrolling takes place.
   final double velocity;
 
   /// Start scrolling after this duration after the widget is first displayed.
-  ///
-  /// ## Sample code
-  ///
-  /// This [Marquee] starts scrolling one second after being displayed.
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   startAfter: const Duration(seconds: 1),
-  ///   text: 'Starts one second after being displayed.',
-  /// )
-  /// ```
   final Duration startAfter;
 
   /// After each round, a pause of this duration occurs.
-  ///
-  /// ## Sample code
-  ///
-  /// After every round, this marquee pauses for one second.
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   pauseAfterRound: const Duration(seconds: 1),
-  ///   text: 'Pausing for some time after every round.',
-  /// )
-  /// ```
-  ///
-  /// See also:
-  ///
-  /// * [accelerationDuration] and [decelerationDuration] to make the
-  ///   transitions between moving and paused state smooth.
-  /// * [accelerationCurve] and [decelerationCurve] to have more control about
-  ///   how the transition between moving and pausing state occur.
   final Duration pauseAfterRound;
 
   /// When the text scrolled around [numberOfRounds] times, it will stop scrolling
-  /// `null` indicates there is no limit
-  ///
-  /// ## Sample code
-  ///
-  /// This marquee stops after 3 rounds
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   numberOfRounds:3,
-  ///   text: 'Stopping after three rounds.'
-  /// )
-  /// ```
   final int? numberOfRounds;
 
-  /// Whether the fading edge should only appear while the text is
-  /// scrolling.
-  ///
-  /// ## Sample code
-  ///
-  /// This marquee will only show the fade while scrolling.
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   showFadingOnlyWhenScrolling: true,
-  ///   fadingEdgeStartFraction: 0.1,
-  ///   fadingEdgeEndFraction: 0.1,
-  ///   text: 'Example text.',
-  /// )
-  /// ```
+  /// Whether the fading edge should only appear while the text is scrolling.
   final bool showFadingOnlyWhenScrolling;
 
   /// The fraction of the [Marquee] that will be faded on the left or top.
-  /// By default, there won't be any fading.
-  ///
-  /// ## Sample code
-  ///
-  /// This marquee fades the edges while scrolling
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   showFadingOnlyWhenScrolling: true,
-  ///   fadingEdgeStartFraction: 0.1,
-  ///   fadingEdgeEndFraction: 0.1,
-  ///   text: 'Example text.',
-  /// )
-  /// ```
   final double fadingEdgeStartFraction;
 
   /// The fraction of the [Marquee] that will be faded on the right or down.
-  /// By default, there won't be any fading.
-  ///
-  /// ## Sample code
-  ///
-  /// This marquee fades the edges while scrolling
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   showFadingOnlyWhenScrolling: true,
-  ///   fadingEdgeStartFraction: 0.1,
-  ///   fadingEdgeEndFraction: 0.1,
-  ///   text: 'Example text.',
-  /// )
-  /// ```
   final double fadingEdgeEndFraction;
 
   /// A padding for the resting position.
-  ///
-  /// In between rounds, the marquee stops at this position. This parameter is
-  /// especially useful if the marquee pauses after rounds and some other
-  /// widgets are stacked on top of the marquee and block the sides, like
-  /// fading gradients.
-  ///
-  /// ## Sample code
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   startPadding: 20.0,
-  ///   pauseAfterRound: Duration(seconds: 1),
-  ///   text: "During pausing, this text is shifted 20 pixel to the right."
-  /// )
-  /// ```
   final double startPadding;
 
   /// How long the acceleration takes.
-  ///
-  /// At the start of each round, the scrolling speed gains momentum for this
-  /// duration. This parameter is only useful if you embrace a pause after
-  /// every round.
-  ///
-  /// ## Sample code
-  ///
-  /// A marquee that slowly accelerates in two seconds.
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   accelerationDuration: Duration(seconds: 2),
-  ///   text: 'Gaining momentum in two seconds.'
-  /// )
-  /// ```
-  ///
-  /// See also:
-  ///
-  /// * [accelerationCurve] to define a custom curve for accelerating.
-  /// * [decelerationDuration], the equivalent for decelerating.
   final Duration accelerationDuration;
 
   /// The acceleration at the start of each round.
-  ///
-  /// At the start of each round, the acceleration is defined by this curve
-  /// where 0.0 stands for not moving and 1.0 for the target [velocity].
-  /// Notice that it's useless to set the curve if you leave the
-  /// [accelerationDuration] at the default of [Duration.zero].
-  /// Also notice that you don't provide the scroll positions, but the actual
-  /// velocity, so this curve gets integrated.
-  ///
-  /// ## Sample code
-  ///
-  /// A marquee that accelerates with a custom curve.
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   accelerationDuration: Duration(seconds: 1),
-  ///   accelerationCurve: Curves.easeInOut,
-  ///   text: 'Accelerating with a custom curve.'
-  /// )
-  /// ```
-  ///
-  /// See also:
-  ///
-  /// * [accelerationDuration] to change the duration of the acceleration.
-  /// * [decelerationCurve], the equivalent for decelerating.
   final _IntegralCurve accelerationCurve;
 
   /// How long the deceleration takes.
-  ///
-  /// At the end of each round, the scrolling speed gradually comes to a
-  /// halt in this duration. This parameter is only useful if you embrace a
-  /// pause after every round.
-  ///
-  /// ## Sample code
-  ///
-  /// A marquee that gradually comes to a halt in two seconds.
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   decelerationDuration: Duration(seconds: 2),
-  ///   text: 'Gradually coming to a halt in two seconds.'
-  /// )
-  /// ```
-  ///
-  /// See also:
-  ///
-  /// * [decelerationCurve] to define a custom curve for accelerating.
-  /// * [accelerationDuration], the equivalent for decelerating.
   final Duration decelerationDuration;
 
   /// The deceleration at the end of each round.
-  ///
-  /// At the end of each round, the deceleration is defined by this curve where
-  /// 0.0 stands for not moving and 1.0 for the target [velocity].
-  /// Notice that it's useless to set this curve if you leave the
-  /// [accelerationDuration] at the default of [Duration.zero].
-  /// Also notice that you don't provide the scroll position, but the actual
-  /// velocity, so this curve gets integrated.
-  ///
-  /// ## Sample code
-  ///
-  /// A marquee that decelerates with a custom curve.
-  ///
-  /// ```dart
-  /// Marquee(
-  ///   decelerationDuration: Duration(seconds: 1),
-  ///   decelerationCurve: Curves.easeInOut,
-  ///   text: 'Decelerating with a custom curve.'
-  /// )
-  /// ```
-  ///
-  /// See also:
-  ///
-  /// * [decelerationDuration] to change the duration of the acceleration.
-  /// * [accelerationCurve], the equivalent for decelerating.
   final _IntegralCurve decelerationCurve;
 
   /// This function will be called if [numberOfRounds] is set and the [Marquee]
@@ -576,7 +315,9 @@ class _MarqueeState extends State<Marquee> with SingleTickerProviderStateMixin {
   /// Calculates all necessary values for animating, then starts the animation.
   void _initialize(BuildContext context) {
     // Calculate lengths (amount of pixels that each phase needs).
-    final totalLength = _getTextWidth(context) + widget.blankSpace;
+    final contentWidth =
+        widget.containerExtent ?? widget.sizeCalculator!(context);
+    final totalLength = contentWidth + widget.blankSpace;
     final accelerationLength = widget.accelerationCurve.integral *
         widget.velocity *
         _accelerationDuration.inMilliseconds /
@@ -682,24 +423,6 @@ class _MarqueeState extends State<Marquee> with SingleTickerProviderStateMixin {
     }
   }
 
-  /// Returns the width of the text.
-  double _getTextWidth(BuildContext context) {
-    final span = TextSpan(text: widget.text, style: widget.style);
-
-    final constraints = BoxConstraints(maxWidth: double.infinity);
-
-    final richTextWidget = Text.rich(span).build(context) as RichText;
-    final renderObject = richTextWidget.createRenderObject(context);
-    renderObject.layout(constraints);
-
-    final boxes = renderObject.getBoxesForSelection(TextSelection(
-      baseOffset: 0,
-      extentOffset: TextSpan(text: widget.text).toPlainText().length,
-    ));
-
-    return boxes.last.right;
-  }
-
   @override
   Widget build(BuildContext context) {
     _initialize(context);
@@ -730,18 +453,22 @@ class _MarqueeState extends State<Marquee> with SingleTickerProviderStateMixin {
       reverse: widget.textDirection == TextDirection.rtl,
       physics: NeverScrollableScrollPhysics(),
       itemBuilder: (_, i) {
-        final text = i.isEven
-            ? Text(
-                widget.text,
-                style: widget.style,
-                textScaler: widget.textScaleFactor != null
-                    ? TextScaler.linear(widget.textScaleFactor!)
-                    : null,
-              )
+        final item = i.isEven
+            ? (widget.containerExtent != null
+                ? SizedBox(
+                    width: widget.scrollAxis == Axis.horizontal
+                        ? widget.containerExtent
+                        : null,
+                    height: widget.scrollAxis == Axis.vertical
+                        ? widget.containerExtent
+                        : null,
+                    child: widget.child,
+                  )
+                : widget.child)
             : _buildBlankSpace();
         return alignment == null
-            ? text
-            : Align(alignment: alignment, child: text);
+            ? item
+            : Align(alignment: alignment, child: item);
       },
     );
 

@@ -22,6 +22,7 @@ class _MyAppState extends State<MyApp> {
           children: [
             _buildMarquee(),
             _buildComplexMarquee(),
+            _buildCustomWidgetMarquee(),
           ].map(_wrapWithStuff).toList(),
         ),
         floatingActionButton: FloatingActionButton.extended(
@@ -36,7 +37,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   Widget _buildMarquee() {
-    return Marquee(
+    return Marquee.text(
       key: Key("$_useRtlText"),
       text: !_useRtlText
           ? 'There once was a boy who told this story about a boy: "'
@@ -46,7 +47,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   Widget _buildComplexMarquee() {
-    return Marquee(
+    return Marquee.text(
       key: Key("$_useRtlText"),
       text: !_useRtlText
           ? 'Some sample text that takes some space.'
@@ -70,10 +71,31 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
+  Widget _buildCustomWidgetMarquee() {
+    return Marquee(
+      key: Key("custom_widget"),
+      containerExtent: 150.0,
+      blankSpace: 20,
+      child: Card(
+        margin: EdgeInsets.zero,
+        color: Colors.blueAccent,
+        child: Container(
+          width: 150.0,
+          alignment: Alignment.center,
+          child: Text(
+            'Custom Widget',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+      velocity: 50.0,
+    );
+  }
+
   Widget _wrapWithStuff(Widget child) {
     return Padding(
       padding: EdgeInsets.all(16),
-      child: Container(height: 50, color: Colors.white, child: child),
+      child: Container(height: 400, color: Colors.white, child: child),
     );
   }
 }
